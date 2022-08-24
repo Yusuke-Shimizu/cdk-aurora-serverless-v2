@@ -6,6 +6,6 @@ from aurora_serverless_v2.aurora_serverless_v2_stack import AuroraServerlessV2St
 
 
 app = cdk.App()
-AuroraServerlessV2Stack(app, "aurora-serverless-v2")
+AuroraServerlessV2Stack(app, "aurora-serverless-v2", stage_name = "hoge")
 
 app.synth()
