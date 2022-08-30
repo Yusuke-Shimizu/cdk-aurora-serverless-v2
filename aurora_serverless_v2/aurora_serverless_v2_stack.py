@@ -53,6 +53,38 @@ class AuroraServerlessV2Stack(Stack):
             credentials=aurora_cluster_credentials,
         )
         
+        on_event = lambda_.Function(self, "MyFunction",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+            handler="verup.handler",
+            code=lambda_.Code.from_asset('lambda'),
+        )
+        my_role = iam.Role(self, "Role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            description="This is a custom role..."
+        )
+        my_role.add_to_policy(iam.PolicyStatement(
+            resources=["*"],
+            actions=[
+                "lambda:*",
+                "logs:*",
+                "rds:*",
+            ]
+        ))
+        my_provider = cr.Provider(self, "MyProvider",
+            on_event_handler=on_event,
+            # is_complete_handler=is_complete,  # optional async "waiter"
+            # log_retention=logs.RetentionDays.ONE_DAY,  # default is INFINITE
+            role=my_role,
+            provider_function_name="y3-shimizu_cluster_verup",
+        )
+        CustomResource(self, "Resource1", 
+            service_token=my_provider.service_token,
+            properties={
+                "DBClusterIdentifier": cluster.cluster_identifier,
+            },
+        )
+
+
         mod_cluster_serverless = cr.AwsSdkCall(
             service="RDS",
             action="modifyDBCluster",
