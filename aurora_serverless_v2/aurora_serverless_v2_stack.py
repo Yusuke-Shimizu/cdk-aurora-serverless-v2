@@ -54,10 +54,17 @@ class AuroraServerlessV2Stack(Stack):
         )
         
         on_event = lambda_.Function(self, "MyFunction",
+            function_name='y3-shimizu_cluster_verup',
             runtime=lambda_.Runtime.PYTHON_3_9,
             handler="verup.handler",
             code=lambda_.Code.from_asset('lambda'),
         )
+        on_event.add_to_role_policy(iam.PolicyStatement(
+            resources=["*"],
+            actions=[
+                "rds:*",
+            ]
+        ))
         my_role = iam.Role(self, "Role",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             description="This is a custom role..."
@@ -75,9 +82,9 @@ class AuroraServerlessV2Stack(Stack):
             # is_complete_handler=is_complete,  # optional async "waiter"
             # log_retention=logs.RetentionDays.ONE_DAY,  # default is INFINITE
             role=my_role,
-            provider_function_name="y3-shimizu_cluster_verup",
+            provider_function_name="y3-shimizu_cluster_verup_provider",
         )
-        CustomResource(self, "Resource1", 
+        version_up=CustomResource(self, "Resource1", 
             service_token=my_provider.service_token,
             properties={
                 "DBClusterIdentifier": cluster.cluster_identifier,
@@ -85,42 +92,42 @@ class AuroraServerlessV2Stack(Stack):
         )
 
 
-        mod_cluster_serverless = cr.AwsSdkCall(
-            service="RDS",
-            action="modifyDBCluster",
-            parameters={
-                "DBClusterIdentifier": cluster.cluster_identifier,
-                "ApplyImmediately": True,
-                "EngineVersion": "8.0.mysql_aurora.3.02.0",
-                # "ServerlessV2ScalingConfiguration": {
-                #     "MinCapacity": 0.5,
-                #     "MaxCapacity": 1,
-                # },
-            },
-            physical_resource_id=cr.PhysicalResourceId.of(
-                cluster.cluster_identifier
-            ),
-        )
-        mod_cluster_provisioned = cr.AwsSdkCall(
-            service="RDS",
-            action="modifyDBCluster",
-            parameters={
-                "DBClusterIdentifier": cluster.cluster_identifier,
-                "ApplyImmediately": True,
-                "EngineVersion": "8.0.mysql_aurora.3.01.0",
-            },
-            physical_resource_id=cr.PhysicalResourceId.of(
-                cluster.cluster_identifier
-            ),
-        )
-        version_up = cr.AwsCustomResource(self, "VersionUp",
-            on_create=mod_cluster_serverless,
-            on_update=mod_cluster_serverless,
-            # on_delete=mod_cluster_provisioned,
-            policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
-                resources=cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-            ),
-        )
+        # mod_cluster_serverless = cr.AwsSdkCall(
+        #     service="RDS",
+        #     action="modifyDBCluster",
+        #     parameters={
+        #         "DBClusterIdentifier": cluster.cluster_identifier,
+        #         "ApplyImmediately": True,
+        #         "EngineVersion": "8.0.mysql_aurora.3.02.0",
+        #         # "ServerlessV2ScalingConfiguration": {
+        #         #     "MinCapacity": 0.5,
+        #         #     "MaxCapacity": 1,
+        #         # },
+        #     },
+        #     physical_resource_id=cr.PhysicalResourceId.of(
+        #         cluster.cluster_identifier
+        #     ),
+        # )
+        # mod_cluster_provisioned = cr.AwsSdkCall(
+        #     service="RDS",
+        #     action="modifyDBCluster",
+        #     parameters={
+        #         "DBClusterIdentifier": cluster.cluster_identifier,
+        #         "ApplyImmediately": True,
+        #         "EngineVersion": "8.0.mysql_aurora.3.01.0",
+        #     },
+        #     physical_resource_id=cr.PhysicalResourceId.of(
+        #         cluster.cluster_identifier
+        #     ),
+        # )
+        # version_up = cr.AwsCustomResource(self, "VersionUp",
+        #     on_create=mod_cluster_serverless,
+        #     on_update=mod_cluster_serverless,
+        #     # on_delete=mod_cluster_provisioned,
+        #     policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
+        #         resources=cr.AwsCustomResourcePolicy.ANY_RESOURCE,
+        #     ),
+        # )
 
         mod_type_serverless = cr.AwsSdkCall(
             service="RDS",
@@ -157,13 +164,14 @@ class AuroraServerlessV2Stack(Stack):
 
         cfnCluster = cluster.node.default_child
 
-        target = version_up.node.find_child("Resource").node.default_child
+        # target = version_up.node.find_child("Resource").node.default_child
         target_mod_type = modify_instance_type.node.default_child
 
         # cfnCluster.add_property_override("EngineMode", "provisioned")
-        version_up.node.add_dependency(cfnCluster)
-        # version_up.node.add_dependency(cluster)
-        modify_instance_type.node.add_dependency(target)
+        # version_up.node.add_dependency(cfnCluster)
+        version_up.node.add_dependency(cluster)
+        # modify_instance_type.node.add_dependency(target)
+        modify_instance_type.node.add_dependency(version_up)
 
         for i in range(1, instance_count + 1):
             # cluster.node.find_child(f"Instance{i}").add_depends_on(target)

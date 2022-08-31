@@ -1,4 +1,5 @@
 import json
+import boto3
 
 client = boto3.client('rds')
 
@@ -13,9 +14,22 @@ def handler(event, context):
 def on_create(event):
     props = event["ResourceProperties"]
     print("create new resource with props %s" % props)
+    db_cluster_name = props['DBClusterIdentifier']
     
     # add your create code here...
     physical_id = 'id'
+    response = client.modify_db_cluster(
+        DBClusterIdentifier=db_cluster_name,
+        ApplyImmediately=True,
+        EngineVersion="8.0.mysql_aurora.3.02.0",
+    )
+    print('modify_db_cluster')
+    print(response)
+    
+    waiter = client.get_waiter('db_cluster_available')
+    waiter.wait(
+        DBClusterIdentifier=db_cluster_name,
+    )
     
     return { 'PhysicalResourceId': physical_id }
 
