@@ -18,4 +18,4 @@ deploy: ## deploy
 
 .PHONY: check
 check: ## check
-	python scripts/mod_aurora.py 
+	python scripts/check_cluster.py 

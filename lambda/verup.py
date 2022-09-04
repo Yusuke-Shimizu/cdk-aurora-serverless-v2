@@ -1,5 +1,6 @@
 import json
 import boto3
+import time
 
 client = boto3.client('rds')
 
@@ -22,14 +23,19 @@ def on_create(event):
         DBClusterIdentifier=db_cluster_name,
         ApplyImmediately=True,
         EngineVersion="8.0.mysql_aurora.3.02.0",
+        # ServerlessV2ScalingConfiguration= {
+        #     "MinCapacity": 0.5,
+        #     "MaxCapacity": 1,
+        # },
     )
     print('modify_db_cluster')
     print(response)
     
-    waiter = client.get_waiter('db_cluster_available')
-    waiter.wait(
-        DBClusterIdentifier=db_cluster_name,
-    )
+    # time.sleep(10)
+    # waiter = client.get_waiter('db_cluster_available')
+    # waiter.wait(
+    #     DBClusterIdentifier=db_cluster_name,
+    # )
     
     return { 'PhysicalResourceId': physical_id }
 
