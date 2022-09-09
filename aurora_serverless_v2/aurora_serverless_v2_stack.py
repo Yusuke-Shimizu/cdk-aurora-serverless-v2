@@ -35,11 +35,6 @@ class AuroraServerlessV2Stack(Stack):
         secret = rds.DatabaseSecret(self, "AuroraSecret", username=db_user)
         aurora_cluster_credentials = rds.Credentials.from_secret(secret, db_user)
 
-        # kms_key = kms.Key(self, "AuroraDatabaseKey", 
-        #     # self, "AuroraDatabaseKey", enable_key_rotation=True, alias=_id
-        #     enable_key_rotation=True
-        # )
-
         instance_count = 1
 
         cluster = rds.DatabaseCluster(self, "AuroraCluster",
@@ -48,7 +43,6 @@ class AuroraServerlessV2Stack(Stack):
             instances=instance_count,
             instance_props=rds.InstanceProps(
                 vpc=vpc,
-                # instance_type=ec2.InstanceType("serverless"),
             ),
             credentials=aurora_cluster_credentials,
         )
@@ -78,14 +72,13 @@ class AuroraServerlessV2Stack(Stack):
         my_provider = cr.Provider(self, "MyProvider",
             on_event_handler=on_event,
             is_complete_handler=is_complete,  # optional async "waiter"
-            # log_retention=logs.RetentionDays.ONE_DAY,  # default is INFINITE
-            # role=my_role,
             provider_function_name="y3-shimizu_cluster_verup_provider",
         )
         version_up=CustomResource(self, "VerUpCustomResource", 
             service_token=my_provider.service_token,
             properties={
                 "DBClusterIdentifier": cluster.cluster_identifier,
+                "DBEngineVersion": "8.0.mysql_aurora.3.02.0"
             },
         )
         for i in range(1, instance_count + 1):
@@ -117,54 +110,40 @@ class AuroraServerlessV2Stack(Stack):
         add_cap.node.add_dependency(version_up)
         
         # インスタンスタイプをServerlessに変更
-        mod_type_serverless = cr.AwsSdkCall(
-            service="RDS",
-            action="modifyDBInstance",
-            parameters={
-                "DBInstanceIdentifier": cluster.instance_identifiers[0],
-                "DBInstanceClass": "db.serverless",
-                "ApplyImmediately": True
-            },
-            physical_resource_id=cr.PhysicalResourceId.of(
-                cluster.instance_identifiers[0]
-            ),
-        )
-        # mod_type_provisioned = cr.AwsSdkCall(
-        #     service="RDS",
-        #     action="modifyDBInstance",
-        #     parameters={
-        #         "DBInstanceIdentifier": cluster.instance_identifiers[0],
-        #         "DBInstanceClass": "db.t3.medium",
-        #         "ApplyImmediately": True
-        #     },
-        #     physical_resource_id=cr.PhysicalResourceId.of(
-        #         cluster.instance_identifiers[0]
-        #     ),
-        # )
-        modify_instance_type = cr.AwsCustomResource(self, "ModType",
-            function_name='y3-shimizu-modify-instance',
-            on_create=mod_type_serverless,
-            on_update=mod_type_serverless,
-            # on_delete=mod_type_provisioned,
-            policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
-                resources=cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-            ),
-        )
-        modify_instance_type.node.add_dependency(add_cap)
-
-        # # cfnCluster = cluster.node.default_child
-
-        # # target = version_up.node.find_child("Resource").node.default_child
-        # # target_mod_type = modify_instance_type.node.default_child
-
-        # # cfnCluster.add_property_override("EngineMode", "provisioned")
-        # # version_up.node.add_dependency(cfnCluster)
-        # # version_up.node.add_dependency(cluster)
-        # # version_up.node.add_dependency(modify_instance_type)
-        # # modify_instance_type.node.add_dependency(target)
-        # modify_instance_type.node.add_dependency(version_up)
-
-        # for i in range(1, instance_count + 1):
-        #     # cluster.node.find_child(f"Instance{i}").add_depends_on(target)
-        #     version_up.node.add_dependency(cluster.node.find_child(f"Instance{i}"))
-        #     # modify_instance_type.node.add_dependency(cluster.node.find_child(f"Instance{i}"))
+        for i in range(instance_count):
+            instance_name = cluster.instance_identifiers[i]
+            
+            mod_type_serverless = cr.AwsSdkCall(
+                service="RDS",
+                action="modifyDBInstance",
+                parameters={
+                    "DBInstanceIdentifier": instance_name,
+                    "DBInstanceClass": "db.serverless",
+                    "ApplyImmediately": True
+                },
+                physical_resource_id=cr.PhysicalResourceId.of(
+                    instance_name
+                ),
+            )
+            mod_type_provisioned = cr.AwsSdkCall(
+                service="RDS",
+                action="modifyDBInstance",
+                parameters={
+                    "DBInstanceIdentifier": instance_name,
+                    "DBInstanceClass": "db.t3.medium",
+                    "ApplyImmediately": True
+                },
+                physical_resource_id=cr.PhysicalResourceId.of(
+                    instance_name
+                ),
+            )
+            modify_instance_type = cr.AwsCustomResource(self, "ModType",
+                function_name='y3-shimizu-modify-instance',
+                on_create=mod_type_serverless,
+                on_update=mod_type_serverless,
+                on_delete=mod_type_provisioned,
+                policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
+                    resources=cr.AwsCustomResourcePolicy.ANY_RESOURCE,
+                ),
+            )
+            modify_instance_type.node.add_dependency(add_cap)

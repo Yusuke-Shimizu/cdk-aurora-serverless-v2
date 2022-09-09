@@ -15,14 +15,30 @@ def handler(event, context):
 def on_create(event):
     props = event["ResourceProperties"]
     print("create new resource with props %s" % props)
-    db_cluster_name = props['DBClusterIdentifier']
+
+    return update_cluster(props)
     
-    # add your create code here...
-    physical_id = 'id'
+def on_update(event):
+    physical_id = event["PhysicalResourceId"]
+    props = event["ResourceProperties"]
+    print("update resource %s with props %s" % (physical_id, props))
+
+    return update_cluster(props)
+
+def on_delete(event):
+    physical_id = event["PhysicalResourceId"]
+    print("delete resource %s" % physical_id)
+
+def update_cluster(props):
+    db_cluster_name = props['DBClusterIdentifier']
+    db_engine_version = props['DBEngineVersion']
+    print(db_cluster_name + " : " + db_engine_version)
+
     response = client.modify_db_cluster(
         DBClusterIdentifier=db_cluster_name,
         ApplyImmediately=True,
-        EngineVersion="8.0.mysql_aurora.3.02.0",
+        # EngineVersion="8.0.mysql_aurora.3.02.0",
+        EngineVersion=db_engine_version,
         # ServerlessV2ScalingConfiguration= {
         #     "MinCapacity": 0.5,
         #     "MaxCapacity": 1,
@@ -30,21 +46,6 @@ def on_create(event):
     )
     print('modify_db_cluster')
     print(response)
-    
-    # time.sleep(10)
-    # waiter = client.get_waiter('db_cluster_available')
-    # waiter.wait(
-    #     DBClusterIdentifier=db_cluster_name,
-    # )
-    
-    return { 'PhysicalResourceId': physical_id }
+    cluster_name = response['DBCluster']['DBClusterIdentifier']
 
-def on_update(event):
-    physical_id = event["PhysicalResourceId"]
-    props = event["ResourceProperties"]
-    print("update resource %s with props %s" % (physical_id, props))
-    # ...
-
-def on_delete(event):
-    physical_id = event["PhysicalResourceId"]
-    print("delete resource %s" % physical_id)
+    return { 'PhysicalResourceId': cluster_name }
