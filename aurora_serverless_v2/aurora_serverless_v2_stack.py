@@ -48,11 +48,12 @@ class AuroraServerlessV2Stack(Stack):
         )
         
         # クラスタバージョンアップ
+        handler_name = "app.handler"
         on_event = lambda_.Function(self, "VerUpFunction",
             function_name='y3-shimizu_cluster_verup',
             runtime=lambda_.Runtime.PYTHON_3_9,
-            handler="verup.handler",
-            code=lambda_.Code.from_asset('lambda'),
+            handler=handler_name,
+            code=lambda_.Code.from_asset('lambda/verup/create'),
         )
         lambda_policy = iam.PolicyStatement(
             resources=["*"],
@@ -61,11 +62,11 @@ class AuroraServerlessV2Stack(Stack):
             ]
         )
         on_event.add_to_role_policy(lambda_policy)
-        is_complete = lambda_.Function(self, "CheckComplete",
+        is_complete = lambda_.Function(self, "VerUpCheckComplete",
             function_name='y3-shimizu_cluster_check_available',
             runtime=lambda_.Runtime.PYTHON_3_9,
-            handler="complete.handler",
-            code=lambda_.Code.from_asset('lambda'),
+            handler=handler_name,
+            code=lambda_.Code.from_asset('lambda/verup/check'),
         )
         is_complete.add_to_role_policy(lambda_policy)
         
@@ -113,37 +114,37 @@ class AuroraServerlessV2Stack(Stack):
         for i in range(instance_count):
             instance_name = cluster.instance_identifiers[i]
             
-            mod_type_serverless = cr.AwsSdkCall(
-                service="RDS",
-                action="modifyDBInstance",
-                parameters={
+            on_event_serverless = lambda_.Function(self, "InstanceServerlessFunction",
+                function_name='y3-shimizu_instance_serverless',
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                handler=handler_name,
+                code=lambda_.Code.from_asset('lambda/serverless/create'),
+            )
+            is_complete_serverless = lambda_.Function(self, "InstanceServerlessCheckComplete",
+                function_name='y3-shimizu_instance_check_serverless',
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                handler=handler_name,
+                code=lambda_.Code.from_asset('lambda/serverless/check'),
+            )
+
+            lambda_policy = iam.PolicyStatement(
+                resources=["*"],
+                actions=[
+                    "rds:*",
+                ]
+            )
+            on_event_serverless.add_to_role_policy(lambda_policy)
+            is_complete_serverless.add_to_role_policy(lambda_policy)
+            
+            my_provider_serverless = cr.Provider(self, "ServerlessProvider",
+                on_event_handler=on_event_serverless,
+                is_complete_handler=is_complete_serverless,  # optional async "waiter"
+                provider_function_name="y3-shimizu_instance_serverless_provider",
+            )
+            serverless_custom_resource=CustomResource(self, "ServerlessCustomResource", 
+                service_token=my_provider_serverless.service_token,
+                properties={
                     "DBInstanceIdentifier": instance_name,
-                    "DBInstanceClass": "db.serverless",
-                    "ApplyImmediately": True
                 },
-                physical_resource_id=cr.PhysicalResourceId.of(
-                    instance_name
-                ),
             )
-            mod_type_provisioned = cr.AwsSdkCall(
-                service="RDS",
-                action="modifyDBInstance",
-                parameters={
-                    "DBInstanceIdentifier": instance_name,
-                    "DBInstanceClass": "db.t3.medium",
-                    "ApplyImmediately": True
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(
-                    instance_name
-                ),
-            )
-            modify_instance_type = cr.AwsCustomResource(self, "ModType",
-                function_name='y3-shimizu-modify-instance',
-                on_create=mod_type_serverless,
-                on_update=mod_type_serverless,
-                on_delete=mod_type_provisioned,
-                policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
-                    resources=cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-                ),
-            )
-            modify_instance_type.node.add_dependency(add_cap)
+            serverless_custom_resource.node.add_dependency(add_cap)
